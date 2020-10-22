@@ -1,0 +1,104 @@
+---
+title: "Practical Machine Learning Project"
+author: "Jan Gil Sarmiento"
+date: "10/22/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Loading the dataset
+
+```{r}
+train <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+                  na.strings=c("", "NA", "#DIV/0!"))
+test <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",
+                 na.strings=c("", "NA", "#DIV/0!"))
+```
+
+Let us examine the features in the training dataset first. We see that there are 19622 observations and 160 variables, and also, there are 5 classes for the measurements which we will be refering to as stances. 
+
+```{r}
+dim(train)
+table(train$classe)
+```
+
+## Preprocessing
+
+Let's split the training dataset into training and validation sets. 
+
+```{r}
+library(caret)
+set.seed(123)
+trainset <- createDataPartition(train$classe, p = 0.8, list = FALSE)
+Training <- train[trainset, ]
+Validation <- train[-trainset, ]
+```
+
+### Variable selection
+
+Let's remove variables with near 0 variances, columns with missing values and descriptive variables which we can't use for analysis.
+
+```{r}
+# Removing near zero variance variables
+zero <- nearZeroVar(Training)
+Training <- Training[, -zero]
+
+# Remove columns with more than 40% missing values and
+# columns with descriptive entries
+
+length_ct <- sapply(Training, function(x) {sum(!(is.na(x) | x == "" ))})
+remove <- names(length_ct[length_ct < 0.6 * length(Training$classe)])
+remove2 <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", 
+    "cvtd_timestamp", "new_window", "num_window")
+remove3 <- c(remove2, remove)
+Training <- Training[, !names(Training) %in% remove3]
+```
+
+## Training the model
+
+We will be implementing random forest as our model for predicting the stance a measurement belongs to. 
+
+```{r}
+library(randomForest)
+rfModel <- randomForest(classe ~ ., data = Training, importance = TRUE, ntrees = 10)
+```
+
+## Model Validation
+
+Testing the performance of the model on the training set and validation set. 
+
+### Training Set Accuracy
+
+```{r}
+train_pred <- predict(rfModel, Training)
+print(confusionMatrix(train_pred, Training$classe))
+```
+
+The forest does very well in predicting the observations from the training set. This could probably be due to the stances having really different measurements. 
+
+Let's check out the accuracy of the model on the validation set to make sure that we did not accidentally model the noise in the training set.
+
+### Validation Set Accuracy
+
+```{r}
+valid_pred <- predict(rfModel, Validation)
+print(confusionMatrix(valid_pred, Validation$classe))
+```
+
+The model seems to be performing really well. Again, this could be due to the separation of the measurements for each stance. It seems further retraining of the model is not needed. Let's proceed to checking the predictions on the test set.
+
+### Test Set Predictions
+
+```{r}
+test_pred <- predict(rfModel, test)
+test_pred
+```
+
+Sadly, we can't compute for the accuracy of these predictions since we have no ground truth value.
